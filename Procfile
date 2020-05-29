@@ -1,0 +1,1 @@
+web: gunicorn --chdir shake_me_backend api:app
