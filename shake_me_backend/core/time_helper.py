@@ -5,12 +5,12 @@ from dateutil.relativedelta import relativedelta
 
 class DatesToMonthDates:
 
-    __ALL_DATES_FOUND = []
+
     __DAY_INCREMENT = relativedelta(days=1)
     __MONTH_INCREMENT = relativedelta(months=1)
 
     def __init__(self, start_date, end_date):
-
+        self.__ALL_DATES_FOUND = []
         self._start_date = datetime.datetime.fromisoformat(start_date)
         self._end_date = datetime.datetime.fromisoformat(end_date)
 
@@ -38,5 +38,5 @@ class DatesToMonthDates:
 
 
 if __name__ == '__main__':
-    a = Testdate("2000-01-06", "2001-01-09").run()
+    a = DatesToMonthDates("2000-01-06", "2001-01-09").run()
     assert True

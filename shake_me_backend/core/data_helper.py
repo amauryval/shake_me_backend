@@ -9,7 +9,7 @@ from shake_me_backend.core.time_helper import DatesToMonthDates
 
 class ImportUsgsEarthquakeData:
 
-    _URL = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime={start_date}&endtime={end_date}&minlatitude={min_lat}&maxlatitude={max_lat}&minlongitude={min_lng}&maxlongitude={max_lng}"
+    _URL = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=4&starttime={start_date}&endtime={end_date}&minlatitude={min_lat}&maxlatitude={max_lat}&minlongitude={min_lng}&maxlongitude={max_lng}"
 
     __mag_category_mapping = {
         'great': [8, 9999],
@@ -38,6 +38,7 @@ class ImportUsgsEarthquakeData:
         self._clean_data()
 
     def map_jsondata(self):
+        print(len(self._data))
         return self._data.to_dict(orient="records")
 
     def chart_jsondata(self):
@@ -53,6 +54,10 @@ class ImportUsgsEarthquakeData:
         chart_data_build = chart_data_build.fillna(value=0)
         chart_data_build = chart_data_build.astype(int)
         chart_data_build = chart_data_build.reset_index()
+
+        for col in self.__mag_category_mapping.keys() :
+            if col not in chart_data_build.columns :
+                chart_data_build.loc[: , col] = 0
         return chart_data_build.to_dict(orient="records")
 
     def _get_dates_to_request(self):
@@ -112,13 +117,15 @@ if __name__ == '__main__':
 
     start_date = "2000-01-06"
     end_date = "2001-01-09"
-    min_lat = 39.095963
-    min_lng = -10.063477
-    max_lat = 53.265213
-    max_lng = 26.477051
+    min_lat = 39.65645604812829
+    min_lng = -2.6806640625
+    max_lat = 49.69606181911566
+    max_lng = 12.568359375000002
 
 
     data = ImportUsgsEarthquakeData(start_date, end_date, min_lat , max_lat , min_lng , max_lng)
     map_data = data.map_jsondata()
     chart_data = data.chart_jsondata()
+
+    print(len(map_data))
     print('aa')

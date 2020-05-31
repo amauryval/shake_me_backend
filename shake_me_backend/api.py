@@ -35,8 +35,6 @@ def app():
             "max_lat": request.args.get('max_lat', type=float),
             "max_lng": request.args.get('max_lng', type=float),
         }
-
-
         try:
             data = ImportUsgsEarthquakeData(
                 start_date=url_arg_keys["start_date"],
@@ -74,8 +72,6 @@ def app():
 app = app()
 
 if __name__ == '__main__':
-    from gevent import monkey
-    monkey.patch_all()
     app.run(port=5000, debug=True)
 
 
