@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import geopandas as gpd
 
@@ -19,7 +20,7 @@ class ImportUsgsEarthquakeData:
         'light': [4, 5],
         'minor': [0, 4],
     }
-    _FIELDS_PROPERTIES_TO_KEEP = ['mag', 'time', 'place', 'magType', "x", "y", "mag_cat", "country"]
+    _FIELDS_PROPERTIES_TO_KEEP = ['mag', 'time', 'place', 'magType', "x", "y", "mag_cat", "country", "bounds"]
 
     def __init__(self, start_date, end_date, min_lat, max_lat, min_lng, max_lng, output_csv=None):
 
@@ -38,18 +39,17 @@ class ImportUsgsEarthquakeData:
         self._clean_data()
 
     def map_jsondata(self):
-        print(len(self._data))
-        print(self._data.columns)
+        # self._data.drop(columns=["bounds"], inplace=True)
         return self._data.to_dict(orient="records")
 
     def chart_jsondata(self):
-        chart_data = self._data[["country", "mag_cat"]]
+        chart_data = self._data[["country", "bounds", "mag_cat"]]
         # chart_data = chart_data.astype({
         #     'place': 'category',
         #     'mag_cat': 'category'
         # })
-        chart_data_build = chart_data.groupby(['country', 'mag_cat']).size().reset_index(name='count')
-        chart_data_build = chart_data_build.set_index(["country", "mag_cat"]).unstack('mag_cat')
+        chart_data_build = chart_data.groupby(['country', "bounds", 'mag_cat']).size().reset_index(name='count')
+        chart_data_build = chart_data_build.set_index(["country", "bounds", "mag_cat"]).unstack('mag_cat')
         chart_data_build.columns = chart_data_build.columns.droplevel(0).rename('')
         # chart_data_build.set_index("place", inplace=True)
         chart_data_build = chart_data_build.fillna(value=0)
@@ -59,6 +59,10 @@ class ImportUsgsEarthquakeData:
         for col in self.__mag_category_mapping.keys():
             if col not in chart_data_build.columns :
                 chart_data_build.loc[: , col] = 0
+
+        chart_data_build["count"] = chart_data_build.sum(axis=1)
+        chart_data_build = chart_data_build.sort_values(by='count', ascending=False)
+
         return chart_data_build.to_dict(orient="records")
 
     def _get_dates_to_request(self):
@@ -134,11 +138,37 @@ class ImportUsgsEarthquakeData:
         # locations_found.drop_duplicates(keep=False, inplace=True)
         # self._data = self._data.merge(locations_found, left_on='place', right_on='place', how="left")
 
-        self._data["country"] = self._data["place"].apply(
-            lambda x: self._find_country(x)
-        )
+        # self._data["country"] = self._data["place"].apply(
+        #     lambda x: self._find_country(x)
+        # )
+        try:
+            countries_df = gpd.read_file(os.path.join(os.getcwd(), "shake_me_backend/data/TM_WORLD_BORDERS-0.3.shp"))[["NAME", "geometry"]]
+        except:
+            countries_df = gpd.read_file(os.path.join(os.getcwd() , "../data/TM_WORLD_BORDERS-0.3.shp"))[
+                ["NAME", "geometry"]]
 
-        self._data = self._data[self._FIELDS_PROPERTIES_TO_KEEP]
+        countries_df["bounds"] = countries_df.geometry.apply(lambda x: x.bounds)
+        countries_df = countries_df.rename(columns={'NAME': 'country'})
+        countries_df = countries_df[["country", "geometry", "bounds"]]
+
+        self._data = self._data.reset_index()
+        inside = gpd.sjoin(self._data, countries_df, op="within", rsuffix="ct_")
+        inside.drop(columns=["index_ct_"], inplace=True)
+
+        outside = self._data.loc[~self._data["index"].isin(inside["index"])]
+        if outside.shape[0] > 0:
+            outside.loc[:, "country"] = "Sea"
+
+            outside.loc[:, "bounds"] = ""
+
+            data = pd.concat([inside, outside])
+        else:
+            data = inside
+
+        assert data.shape[0] == self._data.shape[0]
+
+        # self._data["bbox"] = self._data["country".apply(lambda x: get_boundingbox_country(x))
+        self._data = data[self._FIELDS_PROPERTIES_TO_KEEP]
 
     @staticmethod
     def _find_country(place):

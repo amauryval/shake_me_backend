@@ -7,6 +7,7 @@ from flask_cors import CORS
 
 from shake_me_backend.core.data_helper import ImportUsgsEarthquakeData
 
+from shake_me_backend.core.nominatim_helper import get_boundingbox_country
 
 
 def app():
@@ -25,7 +26,7 @@ def app():
         return response
 
     @geom_api.route('/mapdata', methods=['GET'])
-    def get_grid():
+    def get_eq_data():
 
         url_arg_keys = {
             "start_date": request.args.get('start_date', type=str, default="2000-01-01"),
@@ -49,6 +50,31 @@ def app():
                 {
                     "map_data": data.map_jsondata(),
                     "chart_data": data.chart_jsondata()
+                }
+            )
+
+            output.headers.add('Access-Control-Allow-Origin', '*')
+
+            return output
+
+        except (ValueError) as err:
+            err = repr(err)
+            return bad_request(err, 400)
+
+    @geom_api.route('/bboxfrom', methods=['GET'])
+    def get_bbox():
+
+        url_arg_keys = {
+            "country": request.args.get('country', type=str),
+        }
+        try:
+            data = get_boundingbox_country(
+                country=url_arg_keys["country"]
+            )
+            print(data)
+            output = jsonify(
+                {
+                    "bbox": data,
                 }
             )
 
