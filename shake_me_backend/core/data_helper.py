@@ -39,19 +39,13 @@ class ImportUsgsEarthquakeData:
         self._clean_data()
 
     def map_jsondata(self):
-        # self._data.drop(columns=["bounds"], inplace=True)
         return self._data.to_dict(orient="records")
 
     def chart_jsondata(self):
         chart_data = self._data[["country", "bounds", "mag_cat"]]
-        # chart_data = chart_data.astype({
-        #     'place': 'category',
-        #     'mag_cat': 'category'
-        # })
         chart_data_build = chart_data.groupby(['country', "bounds", 'mag_cat']).size().reset_index(name='count')
         chart_data_build = chart_data_build.set_index(["country", "bounds", "mag_cat"]).unstack('mag_cat')
         chart_data_build.columns = chart_data_build.columns.droplevel(0).rename('')
-        # chart_data_build.set_index("place", inplace=True)
         chart_data_build = chart_data_build.fillna(value=0)
         chart_data_build = chart_data_build.astype(int)
         chart_data_build = chart_data_build.reset_index()
@@ -75,15 +69,6 @@ class ImportUsgsEarthquakeData:
         self._dates_to_request = [(self._dates_to_request[0][0], self._dates_to_request[-1][-1])]
 
     def _prepare_requests(self):
-        for start_date , end_date in self._dates_to_request:
-            print(self._URL.format(
-                    start_date=start_date,
-                    end_date=end_date,
-                    min_lat=self._min_lat,
-                    max_lat=self._max_lat,
-                    min_lng=self._min_lng,
-                    max_lng=self._max_lng,
-                ))
         self._requests = [
             grequests.get(
                 self._URL.format(
@@ -122,25 +107,6 @@ class ImportUsgsEarthquakeData:
         self._data['mag_cat'] = self._data['mag'].apply(lambda feature: next((cat_title for cat_title, interval in self.__mag_category_mapping.items() if interval[0] <= feature < interval[-1]), 'unknown'))
         self._data = self._data.fillna(value="Unknown")
 
-        # to find the country but nominatim is not very good
-        # self._data["lat"] = self._data["geometry"].y
-        # self._data["lon"] = self._data["geometry"].x
-        # raw_data = self._data.copy(deep=True)
-        # raw_data = raw_data[["lat", "lon", "place"]].to_dict(orient="records")
-        # print("aaaaaaaaaaaa")
-        # locations_found = NominatimApi(raw_data).data()
-        # for x , y in zip(locations_found, raw_data):
-        #     x.update(y)
-        #     del x["lat"]
-        #     del x["lon"]
-        # locations_found = pd.DataFrame(locations_found)
-        # locations_found.sort_values("place" , inplace=True)
-        # locations_found.drop_duplicates(keep=False, inplace=True)
-        # self._data = self._data.merge(locations_found, left_on='place', right_on='place', how="left")
-
-        # self._data["country"] = self._data["place"].apply(
-        #     lambda x: self._find_country(x)
-        # )
         try:
             countries_df = gpd.read_file(os.path.join(os.getcwd(), "shake_me_backend/data/TM_WORLD_BORDERS-0.3.shp"))[["NAME", "geometry"]]
         except:
@@ -158,16 +124,13 @@ class ImportUsgsEarthquakeData:
         outside = self._data.loc[~self._data["index"].isin(inside["index"])]
         if outside.shape[0] > 0:
             outside.loc[:, "country"] = "Sea"
-
             outside.loc[:, "bounds"] = ""
-
             data = pd.concat([inside, outside])
         else:
             data = inside
 
         assert data.shape[0] == self._data.shape[0]
 
-        # self._data["bbox"] = self._data["country".apply(lambda x: get_boundingbox_country(x))
         self._data = data[self._FIELDS_PROPERTIES_TO_KEEP]
 
     @staticmethod
