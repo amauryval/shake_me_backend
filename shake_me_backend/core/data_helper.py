@@ -1,11 +1,17 @@
 import os
 import pandas as pd
 import geopandas as gpd
+import json
 
 import grequests
 import itertools
 
 from shake_me_backend.core.time_helper import DatesToMonthDates
+
+from requests_futures import sessions
+
+
+
 
 
 class ImportUsgsEarthquakeData:
@@ -51,8 +57,8 @@ class ImportUsgsEarthquakeData:
         chart_data_build = chart_data_build.reset_index()
 
         for col in self.__mag_category_mapping.keys():
-            if col not in chart_data_build.columns :
-                chart_data_build.loc[: , col] = 0
+            if col not in chart_data_build.columns:
+                chart_data_build.loc[:, col] = 0
 
         chart_data_build["count"] = chart_data_build.sum(axis=1)
         chart_data_build = chart_data_build.sort_values(by='count', ascending=False)
@@ -66,34 +72,49 @@ class ImportUsgsEarthquakeData:
             self._end_date
         ).run()
         # get min and max date
-        self._dates_to_request = [(self._dates_to_request[0][0], self._dates_to_request[-1][-1])]
+        # self._dates_to_request = [(self._dates_to_request[0][0], self._dates_to_request[-1][-1])]
 
     def _prepare_requests(self):
-        self._requests = [
-            grequests.get(
-                self._URL.format(
-                    start_date=start_date,
-                    end_date=end_date,
-                    min_lat=self._min_lat,
-                    max_lat=self._max_lat,
-                    min_lng=self._min_lng,
-                    max_lng=self._max_lng,
-                )
+        # self._requests = [
+        #     grequests.get(
+        #         self._URL.format(
+        #             start_date=start_date,
+        #             end_date=end_date,
+        #             min_lat=self._min_lat,
+        #             max_lat=self._max_lat,
+        #             min_lng=self._min_lng,
+        #             max_lng=self._max_lng,
+        #         )
+        #     )
+        #     for start_date, end_date in self._dates_to_request
+        # ]
+        self._urls_to_query = [
+            self._URL.format(
+                start_date=start_date,
+                end_date=end_date,
+                min_lat=self._min_lat,
+                max_lat=self._max_lat,
+                min_lng=self._min_lng,
+                max_lng=self._max_lng,
             )
             for start_date, end_date in self._dates_to_request
         ]
 
+
     def _query_requests(self):
-        #TODO Test if response == 200
-        self._requests = grequests.map(self._requests)
+        session = sessions.FuturesSession(max_workers=len(self._urls_to_query))
+        self._requests = [
+            session.get(url).result()
+            for url in self._urls_to_query
+        ]
 
     def _get_data(self):
         self._data = None
         self._data = gpd.GeoDataFrame.from_features(
             list(
                 itertools.chain.from_iterable([
-                    query.json()['features']
-                    for query in self._requests
+                    result.json()['features']
+                    for result in self._requests
                 ])
             )
         )
@@ -108,10 +129,9 @@ class ImportUsgsEarthquakeData:
         self._data = self._data.fillna(value="Unknown")
 
         try:
-            countries_df = gpd.read_file(os.path.join(os.getcwd(), "shake_me_backend/data/TM_WORLD_BORDERS-0.3.shp"))[["NAME", "geometry"]]
+            countries_df = gpd.read_file(os.path.join(os.getcwd(), "data/TM_WORLD_BORDERS-0.3.shp"))
         except:
-            countries_df = gpd.read_file(os.path.join(os.getcwd() , "../data/TM_WORLD_BORDERS-0.3.shp"))[
-                ["NAME", "geometry"]]
+            countries_df = gpd.read_file(os.path.join(os.getcwd(), "../data/TM_WORLD_BORDERS-0.3.shp"))
 
         countries_df["bounds"] = countries_df.geometry.apply(lambda x: x.bounds)
         countries_df = countries_df.rename(columns={'NAME': 'country'})
@@ -152,7 +172,6 @@ class ImportUsgsEarthquakeData:
 
         return place.split(" ")[-1]
 
-
 if __name__ == '__main__':
 
     start_date = "2000-01-06"
@@ -166,6 +185,3 @@ if __name__ == '__main__':
     data = ImportUsgsEarthquakeData(start_date, end_date, min_lat , max_lat , min_lng , max_lng)
     map_data = data.map_jsondata()
     chart_data = data.chart_jsondata()
-
-    print(len(map_data))
-    print('aa')
